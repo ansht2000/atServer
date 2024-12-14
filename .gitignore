@@ -1,2 +1,5 @@
 # ignore executable
 out
+
+# ignore environment variables
+.env
