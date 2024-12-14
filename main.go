@@ -43,6 +43,7 @@ func main() {
 	serveMux.HandleFunc("POST /api/validate_chirp", handlerValidateChirp)
 	serveMux.HandleFunc("POST /api/users", apiCfg.handlerCreateUser)
 	serveMux.HandleFunc("POST /api/chirps", apiCfg.handlerCreateChirp)
+	serveMux.HandleFunc("GET /api/chirps", apiCfg.handlerGetChirps)
 	server := &http.Server{Handler: serveMux, Addr: ":" + port}
 	
 	log.Printf("Serving files from %s on port: %s\n", filepathRoot, port)
