@@ -3,7 +3,6 @@ package main
 import (
 	"database/sql"
 	"encoding/json"
-	"math"
 	"net/http"
 	"time"
 
@@ -15,7 +14,6 @@ import (
 type parametersUsers struct {
 	Password string `json:"password"`
 	Email string `json:"email"`
-	ExpiresInSeconds *int `json:"expires_in_seconds,omitempty"`
 }
 type returnValueUsers struct {
 	Id uuid.UUID `json:"id"`
@@ -23,6 +21,7 @@ type returnValueUsers struct {
 	UpdatedAt time.Time `json:"updated_at"`
 	Email string `json:"email"`
 	Token string `json:"token"`
+	RefreshToken string `json:"refresh_token"`
 }
 
 func (cfg *apiConfig) handlerLoginUser(resWriter http.ResponseWriter, req *http.Request) {
@@ -49,18 +48,24 @@ func (cfg *apiConfig) handlerLoginUser(resWriter http.ResponseWriter, req *http.
 		return
 	}
 
-	expiryTime := params.ExpiresInSeconds
-	// check if ExpiresInSeconds is unset or over an hour
-	if expiryTime == nil {
-		// set to the default 1 hour
-		var oneHour = 3600
-		expiryTime = &oneHour
-	}
-	*expiryTime = int(math.Min(3600, float64(*expiryTime)))
-
-	tokString, err := auth.MakeJWT(user.ID, cfg.secretKey, time.Duration(*expiryTime) * time.Second)
+	tokString, err := auth.MakeJWT(user.ID, cfg.secretKey, time.Hour)
 	if err != nil {
 		respondWithError(resWriter, http.StatusInternalServerError, "error making authorization token", err)
+		return
+	}
+	refreshToken, err := auth.MakeRefreshToken()
+	if err != nil {
+		respondWithError(resWriter, http.StatusInternalServerError, "error making refresh token", err)
+		return
+	}
+
+	createRefreshTokenParams := database.CreateRefreshTokenParams{
+		Token: refreshToken,
+		UserID: user.ID,
+	}
+	_, err = cfg.db.CreateRefreshToken(req.Context(), createRefreshTokenParams)
+	if err != nil {
+		respondWithError(resWriter, http.StatusInternalServerError, "error creating refresh token", err)
 		return
 	}
 
@@ -70,6 +75,7 @@ func (cfg *apiConfig) handlerLoginUser(resWriter http.ResponseWriter, req *http.
 		UpdatedAt: user.UpdatedAt,
 		Email: user.Email,
 		Token: tokString,
+		RefreshToken: refreshToken,
 	}
 	respondWithJSON(resWriter, http.StatusOK, resVals)
 }
