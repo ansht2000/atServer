@@ -68,7 +68,7 @@ func (cfg *apiConfig) handlerCreateChirp(resWriter http.ResponseWriter, req *htt
 	}
 	userID, err := auth.ValidateJWT(bearerToken, cfg.secretKey)
 	if err != nil {
-		respondWithError(resWriter, http.StatusUnauthorized, "error validating user token", err)
+		respondWithError(resWriter, http.StatusUnauthorized, "error validating access token", err)
 		return
 	}
 
@@ -142,4 +142,53 @@ func (cfg *apiConfig) handlerGetChirpsFromID(resWriter http.ResponseWriter, req 
 		UserID: chirp.UserID,
 	}
 	respondWithJSON(resWriter, http.StatusOK, resVal)
+}
+
+func (cfg *apiConfig) handlerDeleteChirpByID(resWriter http.ResponseWriter, req *http.Request) {
+	bearerToken, err := auth.GetBearerToken(req.Header)
+	if err != nil {
+		respondWithError(resWriter, http.StatusUnauthorized, "error getting authorization header", err)
+		return
+	}
+
+	userID, err := auth.ValidateJWT(bearerToken, cfg.secretKey)
+	if err != nil {
+		respondWithError(resWriter, http.StatusUnauthorized, "error validating access token", err)
+		return
+	}
+
+	chirpID, err := uuid.Parse(req.PathValue("chirpID"))
+	if err != nil {
+		respondWithError(resWriter, http.StatusBadRequest, "error parsing id from request", err)
+		return
+	}
+
+	chirp, err := cfg.db.GetChirp(req.Context(), chirpID)
+	if err == sql.ErrNoRows {
+		respondWithError(resWriter, http.StatusNotFound, "chirp not found", err)
+		return
+	} else if err != nil {
+		respondWithError(resWriter, http.StatusInternalServerError, "error getting chirp", err)
+		return
+	}
+
+	if chirp.UserID != userID {
+		respondWithError(resWriter, http.StatusForbidden, "cannot delete content of different author", err)
+		return
+	}
+
+	deletedChirp, err := cfg.db.DeleteChirpByID(req.Context(), chirpID)
+	if err != nil {
+		respondWithError(resWriter, http.StatusInternalServerError, "error deleting chrip", err)
+		return
+	}
+
+	resVals := returnValueChirps{
+		Id: deletedChirp.ID,
+		CreatedAt: deletedChirp.CreatedAt,
+		UpdatedAt: deletedChirp.UpdatedAt,
+		Body: deletedChirp.Body,
+		UserID: deletedChirp.UserID,
+	}
+	respondWithJSON(resWriter, http.StatusNoContent, resVals)
 }

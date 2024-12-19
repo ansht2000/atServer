@@ -53,6 +53,10 @@ func main() {
 	serveMux.HandleFunc("POST /api/refresh", apiCfg.handlerRefresh)
 	serveMux.HandleFunc("POST /api/revoke", apiCfg.handlerRevoke)
 
+	serveMux.HandleFunc("PUT /api/users", apiCfg.handlerUpdateUser)
+
+	serveMux.HandleFunc("DELETE /api/chirps/{chirpID}", apiCfg.handlerDeleteChirpByID)
+
 	server := &http.Server{Handler: serveMux, Addr: ":" + port}
 	
 	log.Printf("Serving files from %s on port: %s\n", filepathRoot, port)

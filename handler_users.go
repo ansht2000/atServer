@@ -114,3 +114,49 @@ func (cfg *apiConfig) handlerCreateUser(resWriter http.ResponseWriter, req *http
 	}
 	respondWithJSON(resWriter, http.StatusCreated, resVal)
 }
+
+func (cfg *apiConfig) handlerUpdateUser(resWriter http.ResponseWriter, req *http.Request) {
+	bearerToken, err := auth.GetBearerToken(req.Header)
+	if err != nil {
+		respondWithError(resWriter, http.StatusUnauthorized, "error getting authorization header", err)
+		return
+	}
+
+	userID, err := auth.ValidateJWT(bearerToken, cfg.secretKey)
+	if err != nil {
+		respondWithError(resWriter, http.StatusUnauthorized, "error validating access token", err)
+		return
+	}
+
+	defer req.Body.Close()
+	params := parametersUsers{}
+	decoder := json.NewDecoder(req.Body)
+	if err = decoder.Decode(&params); err != nil {
+		respondWithError(resWriter, http.StatusInternalServerError, "error decoding request data", err)
+		return
+	}
+
+	hashedPass, err := auth.HashPassword(params.Password)
+	if err != nil {
+		respondWithError(resWriter, http.StatusInternalServerError, "error hashing new password", err)
+		return
+	}
+
+	updateParams := database.UpdateUserEmailPasswordByIDParams{
+		HashedPassword: hashedPass,
+		Email: params.Email,
+		ID: userID,
+	}
+	user, err := cfg.db.UpdateUserEmailPasswordByID(req.Context(), updateParams)
+	if err != nil {
+		respondWithError(resWriter, http.StatusInternalServerError, "error updating email and password", err)
+	}
+
+	resVal := returnValueUsers{
+		Id: user.ID,
+		CreatedAt: user.CreatedAt,
+		UpdatedAt: user.UpdatedAt,
+		Email: user.Email,
+	}
+	respondWithJSON(resWriter, http.StatusOK, resVal)
+}
