@@ -3,6 +3,7 @@ package main
 import (
 	"database/sql"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"time"
 
@@ -11,10 +12,20 @@ import (
 	"github.com/google/uuid"
 )
 
+var ErrInvalidAPIKey = errors.New("invalid api key")
+
 type parametersUsers struct {
 	Password string `json:"password"`
 	Email string `json:"email"`
 }
+
+type parametersWebhook struct {
+	Event string `json:"event"`
+	Data struct {
+		UserID uuid.UUID `json:"user_id"`
+	} `json:"data"`
+}
+
 type returnValueUsers struct {
 	Id uuid.UUID `json:"id"`
 	CreatedAt time.Time `json:"created_at"`
@@ -22,6 +33,7 @@ type returnValueUsers struct {
 	Email string `json:"email"`
 	Token string `json:"token"`
 	RefreshToken string `json:"refresh_token"`
+	IsChirpyRed bool `json:"is_chirpy_red"`
 }
 
 func (cfg *apiConfig) handlerLoginUser(resWriter http.ResponseWriter, req *http.Request) {
@@ -76,6 +88,7 @@ func (cfg *apiConfig) handlerLoginUser(resWriter http.ResponseWriter, req *http.
 		Email: user.Email,
 		Token: tokString,
 		RefreshToken: refreshToken,
+		IsChirpyRed: user.IsChirpyRed,
 	}
 	respondWithJSON(resWriter, http.StatusOK, resVals)
 }
@@ -111,6 +124,7 @@ func (cfg *apiConfig) handlerCreateUser(resWriter http.ResponseWriter, req *http
 		CreatedAt: user.CreatedAt,
 		UpdatedAt: user.UpdatedAt,
 		Email: user.Email,
+		IsChirpyRed: user.IsChirpyRed,
 	}
 	respondWithJSON(resWriter, http.StatusCreated, resVal)
 }
@@ -157,6 +171,44 @@ func (cfg *apiConfig) handlerUpdateUser(resWriter http.ResponseWriter, req *http
 		CreatedAt: user.CreatedAt,
 		UpdatedAt: user.UpdatedAt,
 		Email: user.Email,
+		IsChirpyRed: user.IsChirpyRed,
 	}
 	respondWithJSON(resWriter, http.StatusOK, resVal)
+}
+
+func (cfg *apiConfig) handlerUpgradeUser(resWriter http.ResponseWriter, req *http.Request) {
+	apiKey, err := auth.GetAPIKey(req.Header)
+	if err != nil {
+		respondWithError(resWriter, http.StatusUnauthorized, "could not find api key", err)
+		return
+	}
+
+	if apiKey != cfg.apiKey {
+		respondWithError(resWriter, http.StatusUnauthorized, "invalid api key", ErrInvalidAPIKey)
+		return
+	}
+
+	defer req.Body.Close()
+	params := parametersWebhook{}
+	decoder := json.NewDecoder(req.Body)
+	if err := decoder.Decode(&params); err != nil {
+		respondWithError(resWriter, http.StatusInternalServerError, "error decoding request data", err)
+		return
+	}
+
+	if params.Event != "user.upgraded" {
+		resWriter.WriteHeader(http.StatusNoContent)
+		return
+	}
+
+	_, err = cfg.db.UpgradeUserByID(req.Context(), params.Data.UserID)
+	if err == sql.ErrNoRows {
+		respondWithError(resWriter, http.StatusNotFound, "user not found", err)
+		return
+	} else if err != nil {
+		respondWithError(resWriter, http.StatusInternalServerError, "error retrieving user data", err)
+		return
+	}
+
+	resWriter.WriteHeader(http.StatusNoContent)
 }

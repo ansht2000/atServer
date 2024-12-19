@@ -7,7 +7,6 @@ package database
 
 import (
 	"context"
-	"time"
 
 	"github.com/google/uuid"
 )
@@ -15,7 +14,7 @@ import (
 const createUser = `-- name: CreateUser :one
 INSERT INTO users (id, created_at, updated_at, email, hashed_password)
 VALUES (gen_random_uuid(), NOW(), NOW(), $1, $2)
-RETURNING id, created_at, updated_at, email
+RETURNING id, created_at, updated_at, email, hashed_password, is_chirpy_red
 `
 
 type CreateUserParams struct {
@@ -23,21 +22,16 @@ type CreateUserParams struct {
 	HashedPassword string
 }
 
-type CreateUserRow struct {
-	ID        uuid.UUID
-	CreatedAt time.Time
-	UpdatedAt time.Time
-	Email     string
-}
-
-func (q *Queries) CreateUser(ctx context.Context, arg CreateUserParams) (CreateUserRow, error) {
+func (q *Queries) CreateUser(ctx context.Context, arg CreateUserParams) (User, error) {
 	row := q.db.QueryRowContext(ctx, createUser, arg.Email, arg.HashedPassword)
-	var i CreateUserRow
+	var i User
 	err := row.Scan(
 		&i.ID,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.Email,
+		&i.HashedPassword,
+		&i.IsChirpyRed,
 	)
 	return i, err
 }
@@ -52,7 +46,7 @@ func (q *Queries) DeleteUsers(ctx context.Context) error {
 }
 
 const getUserFromEmail = `-- name: GetUserFromEmail :one
-SELECT id, created_at, updated_at, email, hashed_password FROM users
+SELECT id, created_at, updated_at, email, hashed_password, is_chirpy_red FROM users
 WHERE email = $1
 `
 
@@ -65,6 +59,7 @@ func (q *Queries) GetUserFromEmail(ctx context.Context, email string) (User, err
 		&i.UpdatedAt,
 		&i.Email,
 		&i.HashedPassword,
+		&i.IsChirpyRed,
 	)
 	return i, err
 }
@@ -73,7 +68,7 @@ const updateUserEmailPasswordByID = `-- name: UpdateUserEmailPasswordByID :one
 UPDATE users
 SET email = $1, hashed_password = $2, updated_at = NOW()
 WHERE id = $3
-RETURNING id, created_at, updated_at, email
+RETURNING id, created_at, updated_at, email, hashed_password, is_chirpy_red
 `
 
 type UpdateUserEmailPasswordByIDParams struct {
@@ -82,21 +77,37 @@ type UpdateUserEmailPasswordByIDParams struct {
 	ID             uuid.UUID
 }
 
-type UpdateUserEmailPasswordByIDRow struct {
-	ID        uuid.UUID
-	CreatedAt time.Time
-	UpdatedAt time.Time
-	Email     string
-}
-
-func (q *Queries) UpdateUserEmailPasswordByID(ctx context.Context, arg UpdateUserEmailPasswordByIDParams) (UpdateUserEmailPasswordByIDRow, error) {
+func (q *Queries) UpdateUserEmailPasswordByID(ctx context.Context, arg UpdateUserEmailPasswordByIDParams) (User, error) {
 	row := q.db.QueryRowContext(ctx, updateUserEmailPasswordByID, arg.Email, arg.HashedPassword, arg.ID)
-	var i UpdateUserEmailPasswordByIDRow
+	var i User
 	err := row.Scan(
 		&i.ID,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.Email,
+		&i.HashedPassword,
+		&i.IsChirpyRed,
+	)
+	return i, err
+}
+
+const upgradeUserByID = `-- name: UpgradeUserByID :one
+UPDATE users
+SET is_chirpy_red = true
+WHERE id = $1
+RETURNING id, created_at, updated_at, email, hashed_password, is_chirpy_red
+`
+
+func (q *Queries) UpgradeUserByID(ctx context.Context, id uuid.UUID) (User, error) {
+	row := q.db.QueryRowContext(ctx, upgradeUserByID, id)
+	var i User
+	err := row.Scan(
+		&i.ID,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.Email,
+		&i.HashedPassword,
+		&i.IsChirpyRed,
 	)
 	return i, err
 }

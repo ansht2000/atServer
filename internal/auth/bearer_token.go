@@ -14,7 +14,6 @@ func GetBearerToken(headers http.Header) (string, error) {
 	if len(bearerToken) == 0 {
 		return "", ErrAuthorizationHeaderDoesNotExist
 	}
-
 	/* 
 	   Bearer token in the header should be of the form: "Bearer {token_string}"
 	   so split the string by one space and take the second element of the resulting slice

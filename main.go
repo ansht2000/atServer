@@ -16,6 +16,7 @@ type apiConfig struct {
 	fileserverHits atomic.Int32
 	db *database.Queries
 	secretKey string
+	apiKey string
 }
 
 func main() {
@@ -30,11 +31,13 @@ func main() {
 	}
 	dbQueries := database.New(db)
 	secretKey := os.Getenv("SECRET")
+	apiKey := os.Getenv("POLKA_KEY")
 
 	apiCfg := apiConfig{
 		fileserverHits: atomic.Int32{},
 		db: dbQueries,
 		secretKey: secretKey,
+		apiKey: apiKey,
 	}
 
 	serveMux := http.NewServeMux()
@@ -52,6 +55,7 @@ func main() {
 	serveMux.HandleFunc("POST /api/login", apiCfg.handlerLoginUser)
 	serveMux.HandleFunc("POST /api/refresh", apiCfg.handlerRefresh)
 	serveMux.HandleFunc("POST /api/revoke", apiCfg.handlerRevoke)
+	serveMux.HandleFunc("POST /api/polka/webhooks", apiCfg.handlerUpgradeUser)
 
 	serveMux.HandleFunc("PUT /api/users", apiCfg.handlerUpdateUser)
 
