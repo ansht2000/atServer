@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/ansht2000/atServer/internal/database"
+	"github.com/ansht2000/atServer/internal/auth"
 	"github.com/google/uuid"
 )
 
@@ -18,9 +19,10 @@ var badWords = map[string]struct{}{
 	"fornax":    {},
 }
 
+var ErrBodyLengthTooLong = errors.New("body length is too long")
+
 type parametersChirps struct {
 	Body string `json:"body"`
-	UserID uuid.UUID `json:"user_id"`
 }
 type returnValueChirps struct {
 	Id uuid.UUID `json:"id"`
@@ -44,7 +46,7 @@ func profanityFilter(msg string) string {
 func validateChirp(body string) (string, error) {
 	const maxBodyLength = 140
 	if len(body) > maxBodyLength {
-		return "", errors.New("body length is too long")
+		return "", ErrBodyLengthTooLong
 	}
 	cleanedMessage := profanityFilter(body)
 	return cleanedMessage, nil
@@ -56,16 +58,29 @@ func (cfg *apiConfig) handlerCreateChirp(resWriter http.ResponseWriter, req *htt
 	params := parametersChirps{}
 	if err := decoder.Decode(&params); err != nil {
 		respondWithError(resWriter, http.StatusInternalServerError, "error decoding request data", err)
+		return
+	}
+
+	bearerToken, err := auth.GetBearerToken(req.Header)
+	if err != nil {
+		respondWithError(resWriter, http.StatusUnauthorized, "error getting authorization header", err)
+		return
+	}
+	userID, err := auth.ValidateJWT(bearerToken, cfg.secretKey)
+	if err != nil {
+		respondWithError(resWriter, http.StatusUnauthorized, "error validating user token", err)
+		return
 	}
 
 	cleanedMessage, err := validateChirp(params.Body)
 	if err != nil {
 		respondWithError(resWriter, http.StatusBadRequest, err.Error(), err)
+		return
 	}
 
 	chirpParams := database.CreateChirpParams{
 		Body: cleanedMessage,
-		UserID: params.UserID,
+		UserID: userID,
 	}
 	chirp, err := cfg.db.CreateChirp(req.Context(), chirpParams)
 	if err != nil {

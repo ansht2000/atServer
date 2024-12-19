@@ -15,6 +15,7 @@ import (
 type apiConfig struct {
 	fileserverHits atomic.Int32
 	db *database.Queries
+	secretKey string
 }
 
 func main() {
@@ -28,10 +29,12 @@ func main() {
 		log.Fatalf("could not establish connection to db: %v\n", err)
 	}
 	dbQueries := database.New(db)
+	secretKey := os.Getenv("SECRET")
 
 	apiCfg := apiConfig{
 		fileserverHits: atomic.Int32{},
 		db: dbQueries,
+		secretKey: secretKey,
 	}
 
 	serveMux := http.NewServeMux()
