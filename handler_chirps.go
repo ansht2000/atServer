@@ -5,11 +5,12 @@ import (
 	"encoding/json"
 	"errors"
 	"net/http"
+	"sort"
 	"strings"
 	"time"
 
-	"github.com/ansht2000/atServer/internal/database"
 	"github.com/ansht2000/atServer/internal/auth"
+	"github.com/ansht2000/atServer/internal/database"
 	"github.com/google/uuid"
 )
 
@@ -102,28 +103,48 @@ func (cfg *apiConfig) handlerGetChirps(resWriter http.ResponseWriter, req *http.
 	var chirps []database.Chirp
 	var err error
 
-	authorID := req.URL.Query().Get("author_id")
-	if authorID != "" {
-		userID, _ := uuid.Parse(authorID)
-		chirps, err = cfg.db.GetChirpsByUserID(req.Context(), userID)
-	} else {
-		chirps, err = cfg.db.GetChirps(req.Context())
+	authorID := uuid.Nil
+	authorIDString := req.URL.Query().Get("author_id")
+	if authorIDString != "" {
+		authorID, err = uuid.Parse(authorIDString)
+		if err != nil {
+			respondWithError(resWriter, http.StatusBadRequest, "invalid author ID", err)
+			return
+		}
 	}
+	sortBy := "asc"
+	if req.URL.Query().Get("sort") == "desc" {
+		sortBy = "desc"
+	}
+
+	chirps, err = cfg.db.GetChirps(req.Context())
 	if err != nil {
 		respondWithError(resWriter, http.StatusInternalServerError, "error getting chirps", err)
 		return
 	}
 
-	resVals := make([]returnValueChirps, len(chirps))
-	for i, chirp := range chirps {
-		resVals[i] = returnValueChirps{
+	resVals := []returnValueChirps{}
+	for _, chirp := range chirps {
+		if authorID != uuid.Nil && chirp.UserID != authorID {
+			continue
+		} 
+
+		resVals = append(resVals, returnValueChirps{
 			Id: chirp.ID,
 			CreatedAt: chirp.CreatedAt,
 			UpdatedAt: chirp.UpdatedAt,
 			Body: chirp.Body,
 			UserID: chirp.UserID,
-		}
+		})
 	}
+
+	sort.Slice(resVals, func(i, j int) bool {
+		if sortBy == "desc" {
+			return resVals[i].CreatedAt.After(resVals[j].CreatedAt)
+		}
+		return resVals[i].CreatedAt.Before(resVals[j].CreatedAt)
+	})
+
 	respondWithJSON(resWriter, http.StatusOK, resVals)
 }
 
